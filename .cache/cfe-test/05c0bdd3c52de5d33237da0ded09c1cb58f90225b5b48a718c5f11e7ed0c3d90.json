@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "instruction": "Click the GitHub link",
+  "url": "https://cfe.jp/",
+  "variableKeys": [],
+  "actions": [
+    {
+      "selector": "xpath=/html[1]/body[1]/div[1]/div[1]/section[1]/div[1]/a[2]",
+      "description": "The GitHub link in the SNS & Links section.",
+      "method": "click",
+      "arguments": []
+    }
+  ],
+  "actionDescription": "The GitHub link in the SNS & Links section.",
+  "message": "Action [click] performed successfully on selector: xpath=/html[1]/body[1]/div[1]/div[1]/section[1]/div[1]/a[2]"
+}
