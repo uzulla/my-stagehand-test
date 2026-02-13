@@ -4,6 +4,8 @@ import { execSync } from "child_process";
 
 export interface Recorder {
   stop: () => Promise<number>;
+  /** 現在のページ状態をフレームとして即座に n 枚書き込む */
+  injectFrames: (n?: number) => Promise<void>;
 }
 
 /**
@@ -17,18 +19,21 @@ export function startRecording(
 ): Recorder {
   let frameIndex = 0;
   let stopped = false;
+  let injecting = false;
 
   const capture = async () => {
     while (!stopped) {
-      try {
-        const filePath = path.join(
-          framesDir,
-          `frame-${String(frameIndex).padStart(5, "0")}.png`
-        );
-        await page.screenshot({ path: filePath });
-        frameIndex++;
-      } catch {
-        // ブラウザが閉じられた等の場合は無視
+      if (!injecting) {
+        try {
+          const filePath = path.join(
+            framesDir,
+            `frame-${String(frameIndex).padStart(5, "0")}.png`
+          );
+          await page.screenshot({ path: filePath });
+          frameIndex++;
+        } catch {
+          // ブラウザが閉じられた等の場合は無視
+        }
       }
       await new Promise((r) => setTimeout(r, intervalMs));
     }
@@ -37,6 +42,20 @@ export function startRecording(
   const promise = capture();
 
   return {
+    injectFrames: async (n = 3) => {
+      injecting = true;
+      try {
+        for (let i = 0; i < n; i++) {
+          const filePath = path.join(
+            framesDir,
+            `frame-${String(frameIndex).padStart(5, "0")}.png`
+          );
+          await page.screenshot({ path: filePath });
+          frameIndex++;
+        }
+      } catch {}
+      injecting = false;
+    },
     stop: async () => {
       stopped = true;
       await promise;

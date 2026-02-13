@@ -112,6 +112,7 @@ async function main() {
 
     await highlightElements(ctx.page, actions);
     const ss4 = await ctx.screenshot("04-links-observed");
+    await recorder.injectFrames(3);
     await removeHighlights(ctx.page);
     const test4Passed = actions.length > 0;
     results.push({ step: "Test 4: Link observation", passed: test4Passed, screenshot: ss4 });
@@ -162,6 +163,7 @@ async function main() {
         label: "Click target",
       });
       await ctx.screenshot("05a-click-target");
+      await recorder.injectFrames(3);
       await removeHighlights(ctx.page);
     }
 
