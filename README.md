@@ -29,8 +29,19 @@ cp .env.example .env
 ## 実行
 
 ```bash
+# 通常実行（失敗時はそのまま FAIL）
 pnpm e2e
+
+# セルフヒールモード（act() 失敗時にキャッシュ削除 + リトライ）
+pnpm e2e:self-heal
 ```
+
+### 環境変数
+
+| 変数 | 説明 |
+|------|------|
+| `OPENAI_API_KEY` | OpenAI API キー（必須） |
+| `SELF_HEAL=1` | セルフヒールモード有効化。`act()` 失敗時にキャッシュを削除してリトライする。デフォルトは無効（即 FAIL） |
 
 ブラウザが起動し、https://cfe.jp/ に対して以下のテストが実行される:
 
@@ -41,6 +52,22 @@ pnpm e2e
 5. **リンクのクリック** — `act()` で GitHub リンクをクリックし、遷移先が `github.com` であることを検証
 
 各ステップでスクリーンショットが `screenshots/` に保存される。さらに、テスト全体のブラウザ画面を録画した動画が `recordings/test-recording.mp4` に保存される。
+
+## プロジェクト構成
+
+```
+src/
+  e2e-cfe.ts              # テストシナリオ（エントリーポイント）
+  helpers/
+    test-runner.ts         # Stagehand 初期化、ディレクトリ準備、録画管理、結果レポート
+    screenshot.ts          # スクリーンショット撮影、ベースライン比較・保存
+    recording.ts           # フレームキャプチャ、ffmpeg で MP4 変換
+```
+
+- **`e2e-cfe.ts`**: テストシナリオのみ。ヘルパーを呼び出す形で「何をしているか」が一目で分かる粒度で記述
+- **`helpers/test-runner.ts`**: `setupTestEnv()` / `teardownTestEnv()` でテスト環境のライフサイクルを管理。`TestResult` / `TestContext` 型を定義
+- **`helpers/screenshot.ts`**: `createScreenshotHelper()` でスクリーンショット撮影関数を生成。`compareWithBaseline()` / `saveBaseline()` でビジュアルリグレッション検知
+- **`helpers/recording.ts`**: `startRecording()` / `framesToVideo()` で録画管理
 
 ### 動画録画
 
@@ -239,17 +266,18 @@ assert(githubPage, "GitHub page should have opened");
 
 ## セルフヒール + ビジュアルリグレッション検知
 
-`act()` のキャッシュが壊れた（セレクタがずれた）場合、自動的にキャッシュを削除して LLM で再判定する「セルフヒール」機能を実装している。ただし、ページ自体が視覚的に崩壊している場合はセルフヒールせず即座に FAIL とする。
+`act()` のキャッシュが壊れた（セレクタがずれた）場合に、キャッシュを削除して LLM で再判定する「セルフヒール」機能を実装している。ただし、ページ自体が視覚的に崩壊している場合はセルフヒールせず即座に FAIL とする。
+
+**セルフヒールはデフォルトで無効**。`SELF_HEAL=1` を設定した場合のみ有効になる。無効時は `act()` のアサーション失敗で即 FAIL となり、壊れたキャッシュなどの問題に確実に気づける。
 
 ### 仕組み
 
 1. **初回実行**: テスト成功時にスクリーンショットを `baselines/` に保存
 2. **2回目以降**: `act()` の前に現在のページを撮影し、`pixelmatch` でベースラインと比較
 3. **ビジュアル差異が大きい**（10% 超）→ ページが崩壊しているため **即 FAIL**（diff 画像を保存）
-4. **ビジュアル差異が小さい** + `act()` のアサーション失敗 → **セルフヒール発動**:
-   - 間違って開いたタブを閉じる
-   - `.cache/cfe-test/` のキャッシュを削除
-   - ページを再読み込みし、LLM で再判定して `act()` をリトライ
+4. **ビジュアル差異が小さい** + `act()` のアサーション失敗:
+   - **通常モード**: 即 FAIL（`"Set SELF_HEAL=1 to enable auto-retry"` と案内）
+   - **セルフヒールモード** (`SELF_HEAL=1`): 間違って開いたタブを閉じ、キャッシュを削除、ページを再読み込みして `act()` をリトライ
 5. **セルフヒール成功** → PASS（新しいキャッシュが自動生成される）
 6. **セルフヒール失敗** → FAIL
 
@@ -268,6 +296,8 @@ assert(githubPage, "GitHub page should have opened");
          │
     アサーション OK? ── Yes ──→ PASS (ベースライン更新)
          │ No
+    SELF_HEAL=1 ? ── No ──→ FAIL (即座に失敗)
+         │ Yes
     セルフヒール: キャッシュ削除 → 再試行
          │
     リトライ OK? ── Yes ──→ PASS
@@ -282,18 +312,26 @@ assert(githubPage, "GitHub page should have opened");
 
 ### 実際の動作ログ
 
-キャッシュの xpath セレクタを `a[2]`（GitHub）→ `a[4]`（SlideShare）に書き換えてテストした場合:
+キャッシュの xpath セレクタを `a[2]`（GitHub）→ `a[1]`（Twitter）に書き換えてテストした場合:
 
+**通常モード** (`pnpm e2e`) — 即 FAIL:
 ```
 [Test 5] Clicking the GitHub link using act() ...
-  Pre-click screenshot: screenshots/05a-before-click.png
-  Visual diff against baseline: 0.00%    ← ページは正常
-  Page looks visually OK.
+  act cache hit                           ← 壊れたキャッシュを使用
+  GitHub page not found after act(). (Set SELF_HEAL=1 to enable auto-retry)
+  Expected a page with github.com, but got: [ 'https://cfe.jp/', 'https://x.com/uzulla' ]
+[Test 5] FAILED: GitHub page not found (even after self-heal).
+```
+
+**セルフヒールモード** (`pnpm e2e:self-heal`) — 自動復旧:
+```
+[Test 5] Clicking the GitHub link using act() ...
   act cache hit                           ← 壊れたキャッシュを使用
   GitHub page not found after act(). Attempting self-heal...
   Cache cleared.                          ← キャッシュ削除
   Retrying act() without cache...         ← LLM で再判定
   Self-heal SUCCEEDED: GitHub page opened on retry.
+  Navigated to: https://github.com/uzulla
 [Test 5] PASSED: GitHub page opened.
 ```
 
