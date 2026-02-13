@@ -10,6 +10,7 @@ import {
   VISUAL_DIFF_THRESHOLD,
 } from "./helpers/test-runner.js";
 import { compareWithBaseline, saveBaseline } from "./helpers/screenshot.js";
+import { highlightElement, highlightElements, removeHighlights } from "./helpers/highlight.js";
 
 /**
  * E2E Test: https://cfe.jp/ (uzulla's profile page)
@@ -109,7 +110,9 @@ async function main() {
       console.log(`    ... and ${actions.length - 5} more.`);
     }
 
+    await highlightElements(ctx.page, actions);
     const ss4 = await ctx.screenshot("04-links-observed");
+    await removeHighlights(ctx.page);
     const test4Passed = actions.length > 0;
     results.push({ step: "Test 4: Link observation", passed: test4Passed, screenshot: ss4 });
     console.log(
@@ -149,6 +152,17 @@ async function main() {
       } else {
         console.log("  Page looks visually OK.");
       }
+    }
+
+    // クリック対象を可視化したスクリーンショット（ベースライン比較とは別）
+    const targetActions = await ctx.stagehand.observe("Find the GitHub link");
+    if (targetActions.length > 0) {
+      await highlightElement(ctx.page, targetActions[0].selector, {
+        showCursor: true,
+        label: "Click target",
+      });
+      await ctx.screenshot("05a-click-target");
+      await removeHighlights(ctx.page);
     }
 
     if (pageVisuallyBroken) {
