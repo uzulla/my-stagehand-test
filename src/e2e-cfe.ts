@@ -192,7 +192,9 @@ async function main() {
 
       let attempt = await actAndAssert();
 
-      if (!attempt.success) {
+      const selfHealEnabled = process.env.SELF_HEAL === "1";
+
+      if (!attempt.success && selfHealEnabled) {
         // アサーション失敗 → セルフヒール: キャッシュ削除して再試行
         console.log("  GitHub page not found after act(). Attempting self-heal...");
 
@@ -222,6 +224,8 @@ async function main() {
         } else {
           console.log("  Self-heal FAILED: GitHub page still not found after retry.");
         }
+      } else if (!attempt.success) {
+        console.log("  GitHub page not found after act(). (Set SELF_HEAL=1 to enable auto-retry)");
       }
 
       // 新しく開いたタブのスクリーンショット

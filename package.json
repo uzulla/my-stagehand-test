@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "e2e": "tsx src/e2e-cfe.ts"
+    "e2e": "tsx src/e2e-cfe.ts",
+    "e2e:self-heal": "SELF_HEAL=1 tsx src/e2e-cfe.ts"
   },
   "keywords": [],
   "author": "",
